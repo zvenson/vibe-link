@@ -1,0 +1,13 @@
+# 0.3: the host's page and knobs (SysEx F0 7D 56 4C 01 …), a knob lit while turned, then back to the page chosen here
+300 btn 4
+800 shot
+1000 link FILTER ENV|ATTACK|0.5ms|DECAY|46.0ms|SUSTAIN|35|RELEASE|36.4ms|TRACK|A|SOUND|1 DARK ARP|PATCH|
+1500 shot
+1600 enc 2 2
+1700 shot
+2600 link PERFORM|CUTOFF|262Hz|RESO|22|ENV AMT|+28|RELEASE|53.8ms|TRACK|B|SOUND|12 STRINGS 80S|PATCH|
+3000 btndown 9
+3200 shot
+3400 btnup 9
+3800 shot
+4000 end

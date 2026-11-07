@@ -33,6 +33,11 @@ Built on [Dinghy](https://github.com/zvenson/dinghy), the smallest FM-1 firmware
 | **GLO held** + EDIT ENV LFO ARP FX SEQ | **F1-F6** (the soft keys under the display) | CC 60-65 |
 | GLO tapped alone | MENU | CC 47 |
 
+**The screen shows what you play (0.3).** The VIBE, the Web Player and the VST's window tell the FM-1 the firmware's
+page and what every knob is now (VIBE FM SDK 24, a SysEx `F0 7D 56 4C 01 … F7`): the page on top, KNOB 1-4 with name
+and value, ALGORITHM and PRESETS below. A knob you turn lights up; a click on the host shows here too. Without a host
+the screen keeps the page you last chose (EDIT ENV LFO ARP FX SEQ HOME).
+
 Buttons send 127 pressed and 0 let go. Relative encoders send two's complement: +n as n, -n as 128 - n; a fast turn
 counts more (2, 3, 6 a detent). A MIDI clock coming in blinks PLAY on the beat, START / STOP light it. The screen shows
 the last thing sent.

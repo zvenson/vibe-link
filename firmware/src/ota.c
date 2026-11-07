@@ -178,7 +178,15 @@ static uint32_t ota_take(void)
 /* main loop, outside a session: answer handshakes */
 static void ota_service(void)
 {
-    uint32_t d = ota_take();
+    uint32_t d;
+#ifdef APP_SYSEX
+    {   /* an app's own SysEx (manufacturer 0x7D, non-commercial: VIBE FM Link's screen, 7.11.2026) goes to the app, the
+           rest to the updater as always. #define APP_SYSEX(bytes, n) before platform.c: the bytes between F0 and F7 */
+        const uint8_t *p; uint32_t n;
+        if (ota_frame_get(&p, &n) && n >= 1u && p[0] == 0x7Du) { APP_SYSEX(p, n); ota_frame_done(); return; }
+    }
+#endif
+    d = ota_take();
     if (d == 7u && ota_dec[2] == 0x11)
         ota_reply_identity();
 }

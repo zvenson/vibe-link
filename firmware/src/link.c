@@ -14,7 +14,11 @@
  *   SAVE held    = SHIFT on the VIBE (CC 49). SAVE + PLAY = STOP (CC 54, instead of PLAY).
  *   GLO held     the F layer: GLO + EDIT ENV LFO ARP FX SEQ = F1..F6 (CC 60-65); GLO tapped alone = MENU (CC 47)
  *                SAVE + OCT- / OCT+ = LEFT / RIGHT (CC 56 / 57)
- *   MIDI in      a clock blinks PLAY on the beat; START / STOP light it (nothing else is used)
+ *   MIDI in      a clock blinks PLAY on the beat; START / STOP light it
+ *   SysEx in     (0.3, VIBE FM SDK 24, Protokoll 15c) F0 7D 56 4C 01, the page, then name and value of the VIBE's encoders
+ *                1-4, A, B, DATA (each ended by 00), F7: the screen shows the page and what every knob is now. The VIBE,
+ *                the Web Player and the plugin's window send it when it changes (a click on the host too). Without it
+ *                the screen keeps the page last chosen here (EDIT ENV LFO ARP FX SEQ HOME).
  * What the VIBE makes of it is its controller profile (vibe-sdk/controllers/vibe-fm-link.json): the FM-1 shows up
  * as "VIBE FM Link", the profile matches that name. Every CC is plain MIDI: any DAW can learn it too.
  *
@@ -23,6 +27,8 @@
 #define APP_NAME "VIBE LINK"                    /* the rescue and the crash screen say this */
 static void app_idle(void);
 #define LCD_IDLE app_idle                       /* while the screen's DMA runs: MIDI in (platform.c) */
+static void link_sysex(const unsigned char *b, unsigned int n);
+#define APP_SYSEX link_sysex                    /* (0.3) the host's page and encoders: F0 7D 56 4C 01 … F7 (Protokoll 15c) */
 #include "platform.c"
 
 /* ---- the sound: none. The buffer stays silent (platform.c clears it). */
@@ -49,6 +55,7 @@ static void say2(const char *a, const char *b)  /* "a  >  b" */
     *p = 0; last_ms = fm1_ms; sent_n++;
 }
 static void cc(uint32_t n, uint32_t v) { midi_send(0xB0u | CH, n, v & 127u); }
+static int strcmp_(const char *a, const char *b) { while (*a && *a == *b) a++, b++; return *a != *b; }
 
 /* ---- the screen */
 #define C_ACC RGB(255, 96, 190)                 /* the VIBE's pink */
@@ -82,6 +89,69 @@ static void draw_layer(uint32_t layer)          /* what the held button turns th
     draw_text_box(0, 136, 240, &FONT_S, layer == 1u ? "SHIFT:  PLAY = STOP   OCT = < >" : layer == 2u ? "F KEYS:  EDIT ENV LFO ARP FX SEQ" : "", C_ACC, 1);
 }
 
+/* ---- (0.3) the page and the knobs: from the host (SysEx), else the page last chosen here */
+enum { L_E1 = 0, L_EA = 4, L_EB = 5, L_ED = 6 };   /* the VIBE's encoders as the host numbers them: 1-4, A, B, DATA */
+static const uint8_t L_OF_ENC[7] = {L_ED, L_EA, L_E1, L_E1 + 1, L_E1 + 2, L_E1 + 3, L_EB};   /* the FM-1's SELECT ALGO KNOB1-4 PRESETS */
+static char l_page[20], l_name[7][12], l_val[7][12], here_page[12];
+static uint32_t l_on, l_ser, l_hot_t[7];
+static void link_sysex(const unsigned char *b, unsigned int n)   /* (from platform_poll: the bytes between F0 and F7) */
+{
+    uint32_t i = 4, f, k;
+    char *dst[15];
+    if (n < 4u || b[1] != 0x56u || b[2] != 0x4Cu) return;
+    if (b[3] == 0x00u) { l_on = 0; l_ser++; return; }  /* the host has nothing to show */
+    if (b[3] != 0x01u) return;
+    dst[0] = l_page;
+    for (k = 0; k < 7u; k++) { dst[1 + 2 * k] = l_name[k]; dst[2 + 2 * k] = l_val[k]; }
+    for (f = 0; f < 15u; f++) {
+        uint32_t cap = f ? 12u : 20u, j = 0;
+        while (i < n && b[i]) { if (j < cap - 1u) dst[f][j++] = b[i] >= 32u && b[i] < 127u ? (char)b[i] : '?'; i++; }
+        dst[f][j] = 0;
+        if (i < n) i++;                             /* (its 00) */
+    }
+    l_on = 1; l_ser++;
+}
+static void upper(char *d, const char *s, uint32_t cap)   /* FONT_L has no small letters */
+{
+    uint32_t j = 0;
+    for (; s[j] && j < cap - 1u; j++) d[j] = s[j] >= 'a' && s[j] <= 'z' ? (char)(s[j] - 32) : s[j];
+    d[j] = 0;
+}
+static void draw_title(const char *t, uint16_t c)  /* the page: big, else small when long */
+{
+    char u[20];
+    upper(u, t, sizeof u);
+    if (text_w(&FONT_L, u) <= 236) draw_text_box(0, 2, 240, &FONT_L, u, c, 1);
+    else { cv_begin(240, 32, C_BLACK); cv_text((240 - text_w(&FONT_S, t)) / 2, 8, &FONT_S, t, c); cv_blit(0, 2); }
+}
+static void draw_cell(uint32_t x, uint32_t y, uint32_t e, uint32_t hot)   /* one knob: name small, value big */
+{
+    char u[12];
+    const felucca_font_t *vf;
+    uint16_t edge = hot ? C_ACC : RGB(50, 50, 60);
+    cv_begin(118, 60, C_BLACK);
+    cv_rect(0, 0, 118, 1, edge); cv_rect(0, 59, 118, 1, edge); cv_rect(0, 0, 1, 60, edge); cv_rect(117, 0, 1, 60, edge);
+    if (l_name[e][0]) {
+        cv_text(6, 4, &FONT_S, l_name[e], hot ? C_ACC : C_DIM);
+        upper(u, l_val[e], sizeof u);
+        vf = text_w(&FONT_L, u) <= 110 ? &FONT_L : &FONT_S;
+        cv_text(vf == &FONT_L ? 6 : 6, vf == &FONT_L ? 24 : 32, vf, vf == &FONT_L ? u : l_val[e], C_WHITE);
+    } else cv_text(6, 4, &FONT_S, "-", C_OFF);
+    cv_blit(x, y);
+}
+static void draw_ab(uint32_t layer)             /* ALGORITHM and PRESETS (the host's A and B), or what a held button does */
+{
+    uint32_t r;
+    cv_begin(240, 38, C_BLACK);
+    if (layer) cv_text(4, 10, &FONT_S, layer == 1u ? "SHIFT: PLAY=STOP  OCT=< >" : "F KEYS: EDIT ENV LFO ARP FX SEQ", C_ACC);
+    else for (r = 0; r < 2u; r++) {
+        uint32_t e = r ? L_EB : L_EA;
+        int32_t x = cv_text(4, (int32_t)r * 19, &FONT_S, r ? "B " : "A ", C_ACC);
+        if (l_name[e][0]) { x = cv_text(x, (int32_t)r * 19, &FONT_S, l_name[e], C_DIM); cv_text(x + 8, (int32_t)r * 19, &FONT_S, l_val[e], C_WHITE); }
+    }
+    cv_blit(0, 159);
+}
+
 /* ---- MIDI in: only the clock, to blink PLAY */
 static uint32_t idle_ok, clk_n, clk_t0, clk_beat_ms, clk_run, clk_on;
 static void midi_in(void)
@@ -107,11 +177,13 @@ static void app_main(void)
 {
     uint32_t prev = 0, k, t_change = 0, dirty = 0, lit_drawn = ~0u, status_drawn = ~0u, layer_drawn = ~0u, sent_drawn = ~0u;
     uint32_t glo_used = 0, glo_t = 0, master_sent = 0xFFFFu;
+    uint32_t view_linked = 0, ser_drawn = ~0u, hot_drawn = ~0u;
+    char here_drawn[12] = "";
     uint8_t held[27] = {0};
     if (settings_load(&set, sizeof set) || (int8_t)set.oct < -2 || (int8_t)set.oct > 2) set.oct = 0;
 
     lcd_fill(0, 0, 240, 240, C_BLACK);
-    draw_text_box(0, 14, 240, &FONT_L, "VIBE FM LINK", C_ACC, 1);
+    draw_title("VIBE FM LINK", C_ACC);
     draw_text_box(0, 48, 240, &FONT_S, "the FM-1 as a controller  v" APP_VER, C_OFF, 1);
     draw_text_box(0, 66, 240, &FONT_S, "knobs, buttons, keys > USB-MIDI", C_DIM, 1);
 
@@ -162,6 +234,10 @@ static void app_main(void)
             }
             cc(CC_BTN0 + k, pressed ? 127 : 0);
             if (pressed) say2(BTN_NAME[k], VIBE_NAME[k]);
+            if (pressed && (F_OF[k] || k == BTN_HOME)) {   /* (0.3) the page chosen here stays on the screen */
+                const char *q = k == BTN_HOME ? "CONTROLS" : VIBE_NAME[k]; uint32_t j = 0;
+                while (q[j] && j < sizeof here_page - 1u) { here_page[j] = q[j]; j++; } here_page[j] = 0;
+            }
         }
         for (k = 0; k < 7u; k++) {              /* an endless encoder's acceleration (Ableton 7.11., Sven: "schwerfällig" with one step a
                                                    detent): a detent counts 1 when turned slowly, 2 / 3 / 6 the faster the last ones came
@@ -176,6 +252,7 @@ static void app_main(void)
             {
                 if (e > 63) e = 63; if (e < -63) e = -63;
                 cc(ENC_CC[k], e > 0 ? (uint32_t)e : (uint32_t)(128 + e));
+                l_hot_t[L_OF_ENC[k]] = fm1_ms + 1u;   /* (0.3) its box lit a moment (+ 1: never 0) */
                 { char v[6]; int32_t a = e < 0 ? -e : e; v[0] = e < 0 ? '-' : '+'; v[1] = (char)('0' + a / 10); v[2] = (char)('0' + a % 10); v[3] = 0;
                   char s[16]; char *p = s; const char *q = ENC_VIBE[k]; while (*q) *p++ = *q++; *p++ = ' '; q = v + (a < 10 ? 1 : 0); *p++ = v[0]; while (*q) *p++ = *q++; *p = 0;
                   say2(ENC_NAME[k], s); }
@@ -204,9 +281,31 @@ static void app_main(void)
 
         idle_ok = 1;
         if (lit != lit_drawn) { lit_drawn = lit; draw_keys(lit); }
-        if (sent_n != sent_drawn) { sent_drawn = sent_n; draw_last(); }
-        if ((st = (uint32_t)(oct + 2) | (uint32_t)(usb_ok() ? 16u : 0u)) != status_drawn) { status_drawn = st; draw_status(oct, st & 16u); }
-        if (layer != layer_drawn) { layer_drawn = layer; draw_layer(layer); }
+        if (l_on && usb_ok()) {                 /* (0.3) the host's page and knobs */
+            uint32_t hot = 0;
+            for (k = 0; k < 7u; k++) if (l_hot_t[k] && fm1_ms + 1u - l_hot_t[k] < 700u) hot |= 1u << k; else l_hot_t[k] = 0;
+            if (!view_linked || l_ser != ser_drawn) {
+                if (!view_linked) { lcd_fill(0, 0, 240, 196, C_BLACK); view_linked = 1; hot_drawn = ~0u; }
+                ser_drawn = l_ser; draw_title(l_page[0] ? l_page : here_page[0] ? here_page : "VIBE FM LINK", C_ACC);
+                hot_drawn = ~0u; layer_drawn = ~0u;
+            }
+            if (hot != hot_drawn) {
+                for (k = 0; k < 4u; k++) if (hot_drawn == ~0u || ((hot ^ hot_drawn) >> k & 1u)) draw_cell(k % 2u ? 122u : 0u, k < 2u ? 36u : 97u, k, hot >> k & 1u);
+                hot_drawn = hot;
+            }
+            if (layer != layer_drawn) { layer_drawn = layer; draw_ab(layer); }
+        } else {
+            if (view_linked) {                  /* (back to the screen of its own: the host is gone) */
+                view_linked = 0; lcd_fill(0, 0, 240, 196, C_BLACK); here_drawn[0] = 1; sent_drawn = ~0u; status_drawn = ~0u; layer_drawn = ~0u;
+            }
+            if (here_page[0] && strcmp_(here_page, here_drawn)) {   /* (0.3) the page chosen here, big on top */
+                uint32_t j = 0; while ((here_drawn[j] = here_page[j]) != 0) j++;
+                draw_title(here_page, C_ACC);
+            }
+            if (sent_n != sent_drawn) { sent_drawn = sent_n; draw_last(); }
+            if ((st = (uint32_t)(oct + 2) | (uint32_t)(usb_ok() ? 16u : 0u)) != status_drawn) { status_drawn = st; draw_status(oct, st & 16u); }
+            if (layer != layer_drawn) { layer_drawn = layer; draw_layer(layer); }
+        }
         idle_ok = 0;
 
         if (dirty && fm1_ms - t_change > 2000u) { settings_save(&set, sizeof set); dirty = 0; }

@@ -148,12 +148,12 @@ static void app_main(void);
  * argument) replaces it, a line each: "T keys MASK" (hex or decimal), "T btn ID", "T midi ST D1 D2" (USB),
  * "T trs ST D1 D2" (the TRS jack), "T clock BPM N" (N MIDI clocks at BPM over USB, from T on), "T enc ID N" (encoder
  * ID turned N detents, + = clockwise), "T btndown ID" / "T btnup ID" (a button held, let go), "T end" */
-typedef struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; int8_t enc, encn; uint8_t smk, sa; uint16_t sb; uint8_t src; } host_ev_t;
+typedef struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; int8_t enc, encn; uint8_t smk, sa; uint16_t sb; uint8_t src; uint8_t lx[200]; uint16_t lxn; } host_ev_t;
 /* SMK-37 builds (BOARD_SMK37) also: "T vel V" (the velocity of the keys pressed from now), "T pad P V" (hardware pad
  * P hit at velocity V, V 0 = let go), "T fader F V" (0..127), "T wheel W RAW" (0 pitch, 1 mod; raw ADC 0..1023),
  * "T xkey K V" (keybed key K 0..36 at V, 0 = let go: the outer keys 0..4, 32..36); any build: "T shot" (the screen
  * at T -> OUT-T.ppm) */
-enum { HS_NONE, HS_VEL, HS_PAD, HS_FADER, HS_WHEEL, HS_XKEY, HS_SHOT };
+enum { HS_NONE, HS_VEL, HS_PAD, HS_FADER, HS_WHEEL, HS_XKEY, HS_SHOT, HS_LINK };
 static const host_ev_t SCRIPT0[] = {
     {200, 1u << 7, -1, 0, 0, 0, -1, 0},                         /* C4 */
     {700, 1u << 7 | 1u << 11 | 1u << 14, -1, 0, 0, 0, -1, 0},   /* + E4 G4: a chord */
@@ -193,6 +193,12 @@ static void read_script(const char *path)
         else if (!strcmp(what, "wheel")) { sscanf(line, "%*u %*s %u %u", &a, &b); e.smk = HS_WHEEL; e.sa = (uint8_t)a; e.sb = (uint16_t)b; }
         else if (!strcmp(what, "xkey")) { sscanf(line, "%*u %*s %u %u", &a, &b); e.smk = HS_XKEY; e.sa = (uint8_t)a; e.sb = (uint16_t)b; }
         else if (!strcmp(what, "shot")) e.smk = HS_SHOT;   /* (any board: the screen now -> OUT-<ms>.ppm) */
+        else if (!strcmp(what, "link")) {      /* (VIBE FM Link 0.3) the host's SysEx: "PAGE|NAME1|VALUE1|…" (7 pairs) */
+            const char *q = strchr(line, 'k'); uint32_t n = 0; q = q ? strchr(q, ' ') : 0;
+            e.lx[n++] = 0x7D; e.lx[n++] = 0x56; e.lx[n++] = 0x4C; e.lx[n++] = 0x01;
+            for (q = q ? q + 1 : ""; *q && *q != '\n' && n < sizeof e.lx - 2; q++) e.lx[n++] = *q == '|' ? 0 : (uint8_t)*q;
+            e.lx[n++] = 0; e.lxn = (uint16_t)n; e.smk = HS_LINK;
+        }
         else if (!strcmp(what, "midi") || !strcmp(what, "trs")) {
             sscanf(line, "%*u %*s %i %u %u", (int *)&a, &b, &c);
             e.st = (uint8_t)a; e.d1 = (uint8_t)b; e.d2 = (uint8_t)c; e.src = what[0] == 't' ? 2 : 1;
@@ -292,7 +298,11 @@ static void platform_poll(void)                 /* one call = one millisecond */
     fm1_in.frames++;                            /* (the SMK scans ~625 frames a second; enough for "settled") */
 #endif
     while (step < script_n && script[step].t <= fm1_ms) {
-        if (script[step].smk == HS_SHOT) {
+        if (script[step].smk == HS_LINK) {
+#ifdef APP_SYSEX
+            APP_SYSEX(script[step].lx, script[step].lxn);
+#endif
+        } else if (script[step].smk == HS_SHOT) {
             write_ppm(fm1_ms);
         } else if (script[step].smk) {
 #if BOARD_SMK37
