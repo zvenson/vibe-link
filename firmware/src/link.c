@@ -29,6 +29,7 @@ static void app_idle(void);
 #define LCD_IDLE app_idle                       /* while the screen's DMA runs: MIDI in (platform.c) */
 static void link_sysex(const unsigned char *b, unsigned int n);
 #define APP_SYSEX link_sysex                    /* (0.3) the host's page and encoders: F0 7D 56 4C 01 … F7 (Protokoll 15c) */
+#define SX_FRAME_MAX 4096u                      /* (0.4) the host's picture comes in pieces of up to 4 KB */
 #include "platform.c"
 
 /* ---- the sound: none. The buffer stays silent (platform.c clears it). */
