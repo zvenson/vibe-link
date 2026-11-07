@@ -18,7 +18,7 @@
 #include <stdint.h>
 
 #ifndef STORE_MAGIC
-#define STORE_MAGIC 0x59474E44u                 /* "DNGY": settings and blobs (slots: "SLOT"); your fork: your own */
+#define STORE_MAGIC 0x4B4E4C56u                 /* "VLNK": VIBE FM Link's settings (Dinghy: "DNGY") */
 #endif
 #define NBLOB 8u                                /* blobs: one 4 KiB sector each */
 #define NSLOT 8u                                /* slots: SLOT_SECT sectors each, for something bigger (samples, songs) */
