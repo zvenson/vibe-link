@@ -55,13 +55,13 @@ SDK_SHA256 = {
 }
 
 BOARD = "fm1"                       # fm1 (default) or smk37: BOARD env or --board
-BOARD_PREFIX = {"fm1": "FM-1_94", "smk37": "SMK-37 Pro_94"}   # identity: prefix + minor (0: a dev build) – VIBE FM Link: 94N (943 is taken on the hub: no 0.3)
+BOARD_PREFIX = {"fm1": "FM-1_984", "smk37": "SMK-37 Pro_984"}   # identity: prefix + minor (0: a dev build) – VIBE FM Link: 984N from 0.2 (0.1 was 941: sloopDX 4.x has 94X, Bytemania 941-949)
 BOARD_DEFS = {"fm1": [], "smk37": ["-DBOARD_SMK37=1"]}
 MODELS = {"pro": "SMK-37 Pro", "elite": "SMK-37 Elite", "mke": "MKE-P37"}   # smk37: one keyboard, three names
 DATA_FAMILY = "VIBELNK"              # the SMK store's owner tag (store.h): 1..7 of A-Z 0-9. Your fork: your own
 SCREEN_NAME = "VIBE LINK"              # the update loader's screen (FM-1, ldr_screen.c): the name and its colour (RGB565)
 SCREEN_COLOUR = 0xFB17              # pink, #FF60BE (VIBE)
-PRODUCT = "FM-1_940"                # VIBE FM Link: 94N (Dinghy: 99N) (OUR_LOADER in the installer wants FM-1_9NN). Your fork: pick your own
+PRODUCT = "FM-1_9840"               # VIBE FM Link: 984N (Dinghy: 99N) (OUR_LOADER in the installer wants FM-1_9NN). Your fork: pick your own
 VERSION = None                      # APP_VER for release builds
 
 

@@ -56,7 +56,7 @@ tests/run_host.sh                                    # the app on your computer:
 ```
 
 The app is one file: [firmware/src/link.c](firmware/src/link.c). Everything under it is Dinghy's platform
-([docs/API.md](docs/API.md)). Package identity `FM-1_94N` (N = the minor version).
+([docs/API.md](docs/API.md)). Package identity `FM-1_984N` (N = the minor version; 0.1 reported FM-1_941, a number other firmwares use).
 
 ## License
 
