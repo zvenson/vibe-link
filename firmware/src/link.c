@@ -176,12 +176,11 @@ static void app_main(void)
 #else
         adc = fm1_adc_read(FM1_ADC_MASTER);
 #endif
-        if (adc >= 0) {                         /* MASTER: 0..1023 -> 0..127, sent when it moves a step */
-            uint32_t v = (uint32_t)adc >> 3;
-            if (v != master_sent && (master_sent == 0xFFFFu || (v > master_sent ? v - master_sent : master_sent - v) >= 1u)) {
-                if (master_sent != 0xFFFFu) { cc(CC_MASTER, v); say2("MASTER", "VOLUME"); }
-                master_sent = v;
-            }
+        if (adc >= 0) {                         /* MASTER: 0..1023 -> 0..127 – sent once it has moved 2 steps (its ADC flickers by one:
+                                                   55 / 56 / 55 … flooded the plugin, 7.11.); the ends (0, 127) always reach */
+            uint32_t v = (uint32_t)adc >> 3, d = master_sent == 0xFFFFu ? 99u : v > master_sent ? v - master_sent : master_sent - v;
+            if (master_sent == 0xFFFFu) master_sent = v;
+            else if (d >= 2u || ((v == 0u || v == 127u) && d)) { cc(CC_MASTER, v); say2("MASTER", "VOLUME"); master_sent = v; }
         }
 
         midi_in();
