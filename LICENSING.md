@@ -1,6 +1,6 @@
 # Licensing
 
-Dinghy is free software under the GNU General Public License, version 3 only (`GPL-3.0-only`, full text in
+VIBE FM Link is free software under the GNU General Public License, version 3 only (`GPL-3.0-only`, full text in
 `LICENSE`). You may use, study, change and share it. If you give someone a firmware built from it, give them its
 complete source under the same licence too.
 
@@ -13,7 +13,8 @@ complete source under the same licence too.
 | The TRS MIDI IN `firmware/src/midi_uart.c` | Felucca's, as sloopDX carries it, with the ring read by content from Felucca [Salt] 0.9-salt14 by ChanceTheMaker (found by keremimo) |
 | The update loader's screen: `firmware/loader/ldr_screen.c`, `tests/ldr_screen_test.c` | Copyright (C) 2026 zvenson (from OberVave, the Firmware Hub's look); the idea, a loader that draws, its 5 x 7 letters and the order of things from [Skiff](https://github.com/illuminus5/skiff) by illuminus5, GPL-3.0 |
 | From OberVave: the storage (blobs, slots), `LCD_IDLE`, the SMK-37 wiring of `platform.c`, `store.h`, the pad event queue in `smk_input.h`, `tests/smk_flash_test.c`, `tests/run_tests.sh`, the CI workflow | Copyright (C) 2026 zvenson |
-| The app `firmware/src/dinghy.c`, the wiring `platform.c`, the host mode `tests/`, the docs | zvenson |
+| [Dinghy](https://github.com/zvenson/dinghy): the wiring `platform.c`, the host mode `tests/`, the docs | zvenson |
+| The app `firmware/src/link.c` (VIBE FM Link) | Copyright (C) 2026 Sven Trogus (zvenson) |
 
 ## Third-party material
 
@@ -25,7 +26,7 @@ complete source under the same licence too.
 ## The logo
 
 `assets/logo.svg` / `logo.png` carry the designburg signet: Copyright (C) designburg, all rights reserved, not under
-the GPL. It marks Dinghy itself; a fork uses its own logo.
+the GPL. It marks VIBE FM Link itself; a fork uses its own logo.
 
 ## Trademarks
 
