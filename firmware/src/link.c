@@ -94,11 +94,47 @@ enum { L_E1 = 0, L_EA = 4, L_EB = 5, L_ED = 6 };   /* the VIBE's encoders as the
 static const uint8_t L_OF_ENC[7] = {L_ED, L_EA, L_E1, L_E1 + 1, L_E1 + 2, L_E1 + 3, L_EB};   /* the FM-1's SELECT ALGO KNOB1-4 PRESETS */
 static char l_page[20], l_name[7][12], l_val[7][12], here_page[12];
 static uint32_t l_on, l_ser, l_hot_t[7];
+/* ---- (0.4) the host's picture: a converted FM-1 firmware's own 240 x 240 screen, as the VIBE / the Web Player / the VST
+ *      run it. F0 7D 56 4C 02 i0 i1 i2 <tokens> F7 (Protokoll 15d): i = the first pixel, y * 240 + x, in 3 x 7 bits; then
+ *      t 0..63 = t + 1 pixels of one colour, t 64..127 = t - 63 pixels one by one, a colour = RGB565 in 3 bytes (2+7+7 bits).
+ *      Drawn row piece by row piece as it comes; every message answered F0 7D 56 4C 03 F7 once drawn (the host sends the
+ *      next one then: the platform keeps one message at a time). No message for 3 s, or 00 / 01: the screen of its own. */
+static uint32_t m_on, m_ms, m_nb, m_n;
+static uint16_t m_row[2][240];                  /* (two: one goes out by DMA while the next one fills) */
+static uint16_t m_col(const unsigned char *c)   /* (the panel takes a pixel's two bytes the other way round, as gfx.c's canvas keeps them) */
+{ uint32_t v = (uint32_t)(c[0] & 3u) << 14 | (uint32_t)c[1] << 7 | c[2]; return (uint16_t)(v >> 8 | (v & 255u) << 8); }
+static void m_rx(const unsigned char *b, unsigned int n)
+{
+    uint32_t i, k = 7, x0, x, y;
+    if (n < 7u || (i = (uint32_t)b[4] << 14 | (uint32_t)b[5] << 7 | b[6]) >= 240u * 240u) return;
+    y = i / 240u; x0 = x = i % 240u;
+    while (k < n && y < 240u) {
+        uint32_t t = b[k++], cnt = t < 64u ? t + 1u : t - 63u;
+        uint16_t c = 0;
+        if (t < 64u) { if (k + 3u > n) break; c = m_col(b + k); k += 3u; }
+        for (; cnt && y < 240u; cnt--) {
+            if (t >= 64u) { if (k + 3u > n) break; c = m_col(b + k); k += 3u; }
+            m_row[m_nb][x++] = c;
+            if (x == 240u) { lcd_blit(x0, y, 240u - x0, 1, m_row[m_nb] + x0); m_nb ^= 1u; x0 = x = 0; y++; }
+        }
+    }
+    if (x > x0 && y < 240u) { lcd_blit(x0, y, x - x0, 1, m_row[m_nb] + x0); m_nb ^= 1u; }
+}
+static void m_ack(void)
+{
+#ifndef DINGHY_HOST
+    static const uint8_t ACK[6] = {0xF0, 0x7D, 0x56, 0x4C, 0x03, 0xF7};
+    ota_wire_send(ACK, sizeof ACK);
+#endif
+}
+
 static void link_sysex(const unsigned char *b, unsigned int n)   /* (from platform_poll: the bytes between F0 and F7) */
 {
     uint32_t i = 4, f, k;
     char *dst[15];
     if (n < 4u || b[1] != 0x56u || b[2] != 0x4Cu) return;
+    if (b[3] == 0x02u) { if (!m_on) lcd_fill(0, 0, 240, 240, C_BLACK); m_on = 1; m_ms = fm1_ms; m_n++; m_rx(b, n); m_ack(); return; }   /* (0.4) */
+    m_on = 0;
     if (b[3] == 0x00u) { l_on = 0; l_ser++; return; }  /* the host has nothing to show */
     if (b[3] != 0x01u) return;
     dst[0] = l_page;
@@ -182,10 +218,7 @@ static void app_main(void)
     uint8_t held[27] = {0};
     if (settings_load(&set, sizeof set) || (int8_t)set.oct < -2 || (int8_t)set.oct > 2) set.oct = 0;
 
-    lcd_fill(0, 0, 240, 240, C_BLACK);
-    draw_title("VIBE FM LINK", C_ACC);
-    draw_text_box(0, 48, 240, &FONT_S, "the FM-1 as a controller  v" APP_VER, C_OFF, 1);
-    draw_text_box(0, 66, 240, &FONT_S, "knobs, buttons, keys > USB-MIDI", C_DIM, 1);
+    uint32_t mirrored = 1;                      /* (0.4: the host's picture was on the screen – and at the start: draw it all) */
 
     for (;;) {
         uint32_t keys, down, up, rel, b, st, layer, lit;
@@ -280,6 +313,16 @@ static void app_main(void)
         fm1_led_key(BTN_OCT_DOWN, oct < 0); fm1_led_key(BTN_OCT_UP, oct > 0);
 
         idle_ok = 1;
+        if (m_on && (!usb_ok() || fm1_ms - m_ms > 3000u)) m_on = 0;   /* (0.4: the host's picture gone quiet) */
+        if (m_on) { mirrored = 1; goto drawn; }   /* (the host's picture fills the screen) */
+        if (mirrored) {                         /* (the start, or back from the host's picture: all of the own screen again) */
+            mirrored = 0;
+            lcd_fill(0, 0, 240, 240, C_BLACK);
+            draw_title("VIBE FM LINK", C_ACC);
+            draw_text_box(0, 48, 240, &FONT_S, "the FM-1 as a controller  v" APP_VER, C_OFF, 1);
+            draw_text_box(0, 66, 240, &FONT_S, "knobs, buttons, keys > USB-MIDI", C_DIM, 1);
+            lit_drawn = ~0u; view_linked = 0; here_drawn[0] = 1; here_drawn[1] = 0; sent_drawn = ~0u; status_drawn = ~0u; layer_drawn = ~0u;
+        }
         if (lit != lit_drawn) { lit_drawn = lit; draw_keys(lit); }
         if (l_on && usb_ok()) {                 /* (0.3) the host's page and knobs */
             uint32_t hot = 0;
@@ -306,6 +349,7 @@ static void app_main(void)
             if ((st = (uint32_t)(oct + 2) | (uint32_t)(usb_ok() ? 16u : 0u)) != status_drawn) { status_drawn = st; draw_status(oct, st & 16u); }
             if (layer != layer_drawn) { layer_drawn = layer; draw_layer(layer); }
         }
+    drawn:
         idle_ok = 0;
 
         if (dirty && fm1_ms - t_change > 2000u) { settings_save(&set, sizeof set); dirty = 0; }

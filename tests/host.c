@@ -148,7 +148,7 @@ static void app_main(void);
  * argument) replaces it, a line each: "T keys MASK" (hex or decimal), "T btn ID", "T midi ST D1 D2" (USB),
  * "T trs ST D1 D2" (the TRS jack), "T clock BPM N" (N MIDI clocks at BPM over USB, from T on), "T enc ID N" (encoder
  * ID turned N detents, + = clockwise), "T btndown ID" / "T btnup ID" (a button held, let go), "T end" */
-typedef struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; int8_t enc, encn; uint8_t smk, sa; uint16_t sb; uint8_t src; uint8_t lx[200]; uint16_t lxn; } host_ev_t;
+typedef struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; int8_t enc, encn; uint8_t smk, sa; uint16_t sb; uint8_t src; uint8_t lx[640]; uint16_t lxn; } host_ev_t;
 /* SMK-37 builds (BOARD_SMK37) also: "T vel V" (the velocity of the keys pressed from now), "T pad P V" (hardware pad
  * P hit at velocity V, V 0 = let go), "T fader F V" (0..127), "T wheel W RAW" (0 pitch, 1 mod; raw ADC 0..1023),
  * "T xkey K V" (keybed key K 0..36 at V, 0 = let go: the outer keys 0..4, 32..36); any build: "T shot" (the screen
@@ -198,6 +198,18 @@ static void read_script(const char *path)
             e.lx[n++] = 0x7D; e.lx[n++] = 0x56; e.lx[n++] = 0x4C; e.lx[n++] = 0x01;
             for (q = q ? q + 1 : ""; *q && *q != '\n' && n < sizeof e.lx - 2; q++) e.lx[n++] = *q == '|' ? 0 : (uint8_t)*q;
             e.lx[n++] = 0; e.lxn = (uint16_t)n; e.smk = HS_LINK;
+        }
+        else if (!strcmp(what, "sysex")) {     /* (0.4) "T sysex FILE": one SysEx a line in FILE (hex, without F0/F7), 1 ms apart */
+            char fn[200], hx[2048]; FILE *g; uint32_t t = e.t;
+            if (sscanf(line, "%*u %*s %199s", fn) != 1 || !(g = fopen(fn, "r"))) { perror(fn); exit(1); }
+            while (fgets(hx, sizeof hx, g) && n < 65536u) {
+                host_ev_t s1 = e; unsigned v; const char *q = hx; int used;
+                s1.t = t++; s1.lxn = 0; s1.smk = HS_LINK;
+                while (s1.lxn < sizeof s1.lx && sscanf(q, "%2x%n", &v, &used) == 1) { s1.lx[s1.lxn++] = (uint8_t)v; q += used; }
+                if (s1.lxn) ev[n++] = s1;
+            }
+            fclose(g);
+            continue;
         }
         else if (!strcmp(what, "midi") || !strcmp(what, "trs")) {
             sscanf(line, "%*u %*s %i %u %u", (int *)&a, &b, &c);
