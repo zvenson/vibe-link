@@ -163,14 +163,24 @@ static void app_main(void)
             cc(CC_BTN0 + k, pressed ? 127 : 0);
             if (pressed) say2(BTN_NAME[k], VIBE_NAME[k]);
         }
-        for (k = 0; k < 7u; k++)
-            if ((e = fm1_enc_take(k)) != 0) {
+        for (k = 0; k < 7u; k++) {              /* an endless encoder's acceleration (Ableton 7.11., Sven: "schwerfällig" with one step a
+                                                   detent): a detent counts 1 when turned slowly, 2 / 3 / 6 the faster the last ones came
+                                                   (under 90 / 45 / 25 ms apart); the detents of 20 ms go in one message */
+            static int32_t enc_acc[7]; static uint32_t enc_t[7], enc_last[7]; int32_t d = fm1_enc_take(k);
+            if (d) {
+                uint32_t gap = fm1_ms - enc_last[k]; enc_last[k] = fm1_ms;
+                enc_acc[k] += d * (gap < 25u ? 6 : gap < 45u ? 3 : gap < 90u ? 2 : 1);
+            }
+            if (!enc_acc[k] || fm1_ms - enc_t[k] < 20u) continue;
+            e = enc_acc[k]; enc_acc[k] = 0; enc_t[k] = fm1_ms;
+            {
                 if (e > 63) e = 63; if (e < -63) e = -63;
                 cc(ENC_CC[k], e > 0 ? (uint32_t)e : (uint32_t)(128 + e));
                 { char v[6]; int32_t a = e < 0 ? -e : e; v[0] = e < 0 ? '-' : '+'; v[1] = (char)('0' + a / 10); v[2] = (char)('0' + a % 10); v[3] = 0;
                   char s[16]; char *p = s; const char *q = ENC_VIBE[k]; while (*q) *p++ = *q++; *p++ = ' '; q = v + (a < 10 ? 1 : 0); *p++ = v[0]; while (*q) *p++ = *q++; *p = 0;
                   say2(ENC_NAME[k], s); }
             }
+        }
 #ifdef DINGHY_HOST
         adc = -1;                               /* (the host has no MASTER knob) */
 #else
