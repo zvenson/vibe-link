@@ -74,3 +74,5 @@ The app is one file: [firmware/src/link.c](firmware/src/link.c). Everything unde
 GPL-3.0-only. The platform is Felucca's (Leo Kuroshita, Hügelton Instruments) as SLOOP (isod89) and Dinghy carry it,
 the SMK-37 layer by M. Geisler (genkigenki); VIBE FM Link (the app) by zvenson. Details and credits in
 [LICENSING.md](LICENSING.md).
+
+You can also try VIBE FM Link in the browser, no flashing needed, in the free community [FM-1 Emulator](https://fm1-emulator.atst.tools/).
